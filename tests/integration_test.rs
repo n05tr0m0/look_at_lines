@@ -49,7 +49,7 @@ fn test_cli_full_mode_flags() {
 
     let output = Command::new(bin())
         .arg("-f")
-        .arg("-sS")
+        .arg("-s")
         .arg(root.to_str().unwrap())
         .output()
         .expect("Failed to execute binary");
@@ -267,9 +267,13 @@ fn test_export_to_named_file_json() {
     let content = fs::read_to_string(&output_file).expect("Failed to read output file");
     assert!(content.contains("\"name\": \"file.txt\""));
 
-    // Stdout should print the file path
+    // The last line of stdout is the path to the created file.
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("output.json"));
+    let last_line = stdout.lines().last().unwrap_or("").trim();
+    assert!(
+        last_line.contains("output.json"),
+        "last stdout line should be the output path, got: {last_line}"
+    );
 }
 
 #[test]
@@ -361,9 +365,9 @@ fn test_auto_output_creates_file_in_target_dir_json() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    // The binary prints the created file path to stdout
+    // The table is printed first; the last non-empty stdout line is the created file path.
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let created_path_str = stdout.trim();
+    let created_path_str = stdout.lines().last().unwrap_or("").trim();
     assert!(
         !created_path_str.is_empty(),
         "stdout should contain the path of the created file"
@@ -404,8 +408,9 @@ fn test_auto_output_creates_file_in_target_dir_csv() {
         String::from_utf8_lossy(&output.stderr)
     );
 
+    // The table is printed first; the last non-empty stdout line is the created file path.
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let created_path_str = stdout.trim();
+    let created_path_str = stdout.lines().last().unwrap_or("").trim();
 
     let created_path = std::path::Path::new(created_path_str);
     assert!(
@@ -438,7 +443,9 @@ fn test_auto_output_no_collision() {
         .expect("Failed to execute binary");
     assert!(output1.status.success());
 
-    let path1 = String::from_utf8_lossy(&output1.stdout).trim().to_owned();
+    // The table is printed first; the last non-empty stdout line is the created file path.
+    let stdout1 = String::from_utf8_lossy(&output1.stdout);
+    let path1 = stdout1.lines().last().unwrap_or("").trim().to_owned();
 
     // Second run — must create a different file (with counter)
     let output2 = Command::new(bin())
@@ -449,7 +456,8 @@ fn test_auto_output_no_collision() {
         .expect("Failed to execute binary");
     assert!(output2.status.success());
 
-    let path2 = String::from_utf8_lossy(&output2.stdout).trim().to_owned();
+    let stdout2 = String::from_utf8_lossy(&output2.stdout);
+    let path2 = stdout2.lines().last().unwrap_or("").trim().to_owned();
 
     assert_ne!(
         path1, path2,
@@ -725,8 +733,9 @@ fn test_export_markdown_auto_output() {
         String::from_utf8_lossy(&output.stderr)
     );
 
+    // The table is printed first; the last non-empty stdout line is the created file path.
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let created_path_str = stdout.trim();
+    let created_path_str = stdout.lines().last().unwrap_or("").trim();
 
     assert!(
         !created_path_str.is_empty(),

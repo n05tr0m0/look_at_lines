@@ -14,11 +14,12 @@ It turns file listings into clean, readable tables and gives you powerful export
 
 - **Beautiful output** — heavy box-drawing characters, smart column sizing, full-width Unicode table.
 - **Rich metadata** — permissions, ownership, size, and timestamps with `-f`.
-- **Clipboard integration** — exporting without `-o`/`-O` prints to stdout *and* copies to clipboard automatically.
+- **Clipboard integration** — use `--copy` to copy the output to your clipboard on demand.
 - **Multiple export formats** — JSON, XML, CSV (`;`-delimited), Plain Text, Markdown.
-- **Smart sorting** — combine flags intuitively: `-sS`, `-smd`, `-sbd`.
+- **Smart sorting** — combine flags intuitively: `-s`, `-nd`, `-sd`, `-md`, `-bd`.
 - **Entry filtering** — show only files (`-F`), only directories (`-D`), or include hidden entries (`-H`).
 - **Unicode-aware** — file names in Cyrillic, CJK, Arabic and other scripts truncate correctly.
+- **Dark/light theme** — border and text colours adapt to your terminal's colour scheme automatically.
 
 ---
 
@@ -90,8 +91,9 @@ ll              # list current directory
 ll src/         # list src/
 ll -f src/      # full mode: permissions, owner, group, timestamps
 ll -H .         # include hidden entries (dotfiles)
-ll -sS src/     # sort by size ascending
+ll -s src/      # sort by size ascending
 ll -F -j src/   # only files, export as JSON
+ll -j src/ --copy   # export JSON to stdout and copy to clipboard
 ```
 
 ---
@@ -106,13 +108,12 @@ ll -F -j src/   # only files, export as JSON
 
 ### Sorting
 
-Sorting is opt-in: add `-s` to enable it, then pick a field. If no field flag is given, sorting falls back to name. Mixing two field flags (e.g. `-snS`) also falls back to name.
+Sorting is always active. Pick a field flag to select the sort key. With no field flag the list is sorted by name. Combining two field flags (e.g. `-ns`) also falls back to name.
 
 | Flag | Description |
 |------|-------------|
-| `-s` | Enable sorting |
-| `-n` | Sort by name (default field) |
-| `-S` | Sort by size |
+| `-n` | Sort by name (default) |
+| `-s` | Sort by size |
 | `-m` | Sort by modification time |
 | `-b` | Sort by creation time |
 | `-d` | Descending order (reverses the result) |
@@ -120,13 +121,13 @@ Sorting is opt-in: add `-s` to enable it, then pick a field. If no field flag is
 Examples:
 
 ```bash
-ll -sn          # sort by name, ascending (same as ll -s)
-ll -snd         # sort by name, descending
-ll -sS          # sort by size, ascending
-ll -sSd         # sort by size, descending
-ll -sm          # sort by modification time, ascending
-ll -smd         # sort by modification time, descending
-ll -sbd         # sort by creation time, descending
+ll              # sort by name, ascending (default)
+ll -nd          # sort by name, descending
+ll -s           # sort by size, ascending
+ll -sd          # sort by size, descending
+ll -m           # sort by modification time, ascending
+ll -md          # sort by modification time, descending
+ll -bd          # sort by creation time, descending
 ```
 
 ### Filtering
@@ -151,7 +152,19 @@ Only one format flag can be active per invocation.
 | `-p` | `--plain` | Plain Text | One entry per line. Symlinks rendered as `name -> target`. |
 | `-M` | `--markdown` | Markdown | GFM-compatible table. Compact: Name, Type, Mode, Size, Modified. Full (`-f`): adds User, Group, Created. |
 
-Without `-o`/`-O` the result is printed to **stdout** and **copied to the clipboard**.
+### Clipboard
+
+| Flag | Long form | Description |
+|------|-----------|-------------|
+| — | `--copy` | Copy the output to the system clipboard. Works with any export format, or standalone (copies a plain newline-separated name list). |
+
+Without `--copy` nothing is copied automatically. Use it explicitly:
+
+```bash
+ll --copy               # copy plain name list to clipboard
+ll -j --copy            # export JSON to stdout and also copy it
+ll -j -o list.json --copy   # save JSON to file, copy it, show table
+```
 
 ### Output to file
 
@@ -162,11 +175,29 @@ Saving to a file **requires** an export format flag. Without one, the tool print
 | `-o <file>` | `--output <file>` | Write to the specified file path. |
 | `-O` | `--auto-output` | Auto-generate a filename inside the target directory (e.g. `src.json`). On collision a counter is appended: `src(1).json`, `src(2).json`, … |
 
+**Behaviour depends on whether a file destination is given:**
+
+| Invocation | Table in terminal | Data |
+|------------|-------------------|------|
+| `ll -j` (no `-o`/`-O`) | — | JSON printed to **stdout** only — pipe-friendly |
+| `ll -j -o file.json` | ✓ printed first | written to `file.json`; path printed to stdout |
+| `ll -j -O` | ✓ printed first | written to auto-named file; path printed to stdout |
+
+Without `-o`/`-O` the terminal table is **suppressed** so that the raw export data can be piped cleanly:
+
 ```bash
-ll -j -o list.json .          # write JSON  to ./list.json
-ll -c -O src/                 # write CSV   to src/src.csv  (auto-named)
-ll -M -o FILELIST.md ~/docs   # write Markdown table to FILELIST.md
-ll -p -O .                    # write plain text to ./.<dirname>.txt (auto-named)
+ll -j src/ | jq '.[].name'          # pipe JSON directly — no table noise
+ll -p src/ | fzf                     # pipe plain-text names into fzf
+ll -c src/ > snapshot.csv           # redirect CSV to a file via the shell
+```
+
+With `-o`/`-O` the table is printed first, then the file is written and its path appears as the last line of stdout:
+
+```bash
+ll -j -o list.json .          # table in terminal + write JSON to ./list.json
+ll -c -O src/                 # table in terminal + write CSV to src/src.csv (auto-named)
+ll -M -o FILELIST.md ~/docs   # table in terminal + write Markdown table to FILELIST.md
+ll -p -O .                    # table in terminal + write plain text, auto-named
 ```
 
 ---
@@ -180,19 +211,21 @@ ll src/
 ```
 
 ```
-┏━━━━━━━━━━━━━━┳━━━━━┳━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
-┃ Name         ┃ Exe ┃ Mode┃ Size  ┃ Modified            ┃
-┣━━━━━━━━━━━━━━╋━━━━━╋━━━━━╋━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━┫
-┃ cli.rs       ┃     ┃ 644 ┃ 2.7K  ┃ 2025-06-01 12:34:56 ┃
-┃ export.rs    ┃     ┃ 644 ┃ 7.4K  ┃ 2025-06-01 12:34:56 ┃
-┃ file_info.rs ┃     ┃ 644 ┃ 5.5K  ┃ 2025-06-01 11:58:11 ┃
-┃ main.rs      ┃     ┃ 644 ┃ 5.4K  ┃ 2025-06-01 12:34:56 ┃
-┃ ui.rs        ┃     ┃ 644 ┃ 20.7K ┃ 2025-06-01 11:58:11 ┃
-┗━━━━━━━━━━━━━━┻━━━━━┻━━━━━┻━━━━━━━┻━━━━━━━━━━━━━━━━━━━━━┛
+┏━━━━━━━━━━━━━━┳━━━━━━┳━━━━━━━┳━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
+┃ Name         ┃ Perm ┃  Size ┃ Type ┃            Modified ┃
+┣━━━━━━━━━━━━━━╋━━━━━━╋━━━━━━━╋━━━━━━╋━━━━━━━━━━━━━━━━━━━━━┫
+┃ cli.rs       ┃  644 ┃  2.7K ┃    f ┃ 2025-06-01 12:34:56 ┃
+┃ export.rs    ┃  644 ┃  7.4K ┃    f ┃ 2025-06-01 12:34:56 ┃
+┃ file_info.rs ┃  644 ┃  5.5K ┃    f ┃ 2025-06-01 11:58:11 ┃
+┃ main.rs      ┃  644 ┃  5.4K ┃    f ┃ 2025-06-01 12:34:56 ┃
+┃ theme.rs     ┃  644 ┃  1.4K ┃    f ┃ 2025-06-01 11:58:11 ┃
+┃ ui.rs        ┃  644 ┃ 20.7K ┃    f ┃ 2025-06-01 11:58:11 ┃
+┗━━━━━━━━━━━━━━┻━━━━━━┻━━━━━━━┻━━━━━━┻━━━━━━━━━━━━━━━━━━━━━┛
 ```
 
-Directories are highlighted in blue, executable files in bold white.
-The `Mode` column shows a compact 3-digit octal string.
+Colour coding (dark theme): directories — blue, executable files — **bold gold** (`*f`), regular files — white, symlinks — white.
+On a light terminal the colours shift: directories — dark green, executables — **bold dark red**, regular files — near-black.
+The `Mode` column shows a compact 3-digit octal string; the `Type` column uses single-character codes (`d` dir, `l` symlink, `f` file, `*f` executable).
 
 ### Full mode (`-f`)
 
@@ -201,18 +234,19 @@ ll -f src/
 ```
 
 ```
-┏━━━━━━━━━━━━━━┳━━━━━┳━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
-┃ Name         ┃ Exe ┃ Perm      ┃ Size  ┃ User            ┃ Group          ┃ Created             ┃ Modified            ┃
-┣━━━━━━━━━━━━━━╋━━━━━╋━━━━━━━━━━━╋━━━━━━━╋━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━┫
-┃ cli.rs       ┃     ┃ rw-r--r-- ┃ 2.7K  ┃ alice (1000)    ┃ staff (20)     ┃ 2025-05-10 09:00:00 ┃ 2025-06-01 12:34:56 ┃
-┃ export.rs    ┃     ┃ rw-r--r-- ┃ 7.4K  ┃ alice (1000)    ┃ staff (20)     ┃ 2025-05-10 09:00:00 ┃ 2025-06-01 12:34:56 ┃
-┃ file_info.rs ┃     ┃ rw-r--r-- ┃ 5.5K  ┃ alice (1000)    ┃ staff (20)     ┃ 2025-05-10 09:00:00 ┃ 2025-06-01 11:58:11 ┃
-┃ main.rs      ┃     ┃ rw-r--r-- ┃ 5.4K  ┃ alice (1000)    ┃ staff (20)     ┃ 2025-05-10 09:00:00 ┃ 2025-06-01 12:34:56 ┃
-┃ ui.rs        ┃     ┃ rw-r--r-- ┃ 20.7K ┃ alice (1000)    ┃ staff (20)     ┃ 2025-05-10 09:00:00 ┃ 2025-06-01 11:58:11 ┃
-┗━━━━━━━━━━━━━━┻━━━━━┻━━━━━━━━━━━┻━━━━━━━┻━━━━━━━━━━━━━━━━━┻━━━━━━━━━━━━━━━━┻━━━━━━━━━━━━━━━━━━━━━┻━━━━━━━━━━━━━━━━━━━━━┛
+┏━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━┳━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┓
+┃ Name         ┃      Perm ┃  Size ┃ Type ┃            Modified ┃             Created ┃            User ┃      Group ┃
+┣━━━━━━━━━━━━━━╋━━━━━━━━━━━╋━━━━━━━╋━━━━━━╋━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━━━━━━╋━━━━━━━━━━━━┫
+┃ cli.rs       ┃ rw-r--r-- ┃  2742 ┃    f ┃ 2025-06-01 12:34:56 ┃ 2025-05-10 09:00:00 ┃ alice (1000)    ┃ staff (20) ┃
+┃ export.rs    ┃ rw-r--r-- ┃  7578 ┃    f ┃ 2025-06-01 12:34:56 ┃ 2025-05-10 09:00:00 ┃ alice (1000)    ┃ staff (20) ┃
+┃ file_info.rs ┃ rw-r--r-- ┃  5521 ┃    f ┃ 2025-06-01 11:58:11 ┃ 2025-05-10 09:00:00 ┃ alice (1000)    ┃ staff (20) ┃
+┃ main.rs      ┃ rw-r--r-- ┃  5890 ┃    f ┃ 2025-06-01 12:34:56 ┃ 2025-05-10 09:00:00 ┃ alice (1000)    ┃ staff (20) ┃
+┃ theme.rs     ┃ rw-r--r-- ┃  1422 ┃    f ┃ 2025-06-01 11:58:11 ┃ 2025-05-10 09:00:00 ┃ alice (1000)    ┃ staff (20) ┃
+┃ ui.rs        ┃ rw-r--r-- ┃ 19906 ┃    f ┃ 2025-06-01 11:58:11 ┃ 2025-05-10 09:00:00 ┃ alice (1000)    ┃ staff (20) ┃
+┗━━━━━━━━━━━━━━┻━━━━━━━━━━━┻━━━━━━━┻━━━━━━┻━━━━━━━━━━━━━━━━━━━━━┻━━━━━━━━━━━━━━━━━━━━━┻━━━━━━━━━━━━━━━━━┻━━━━━━━━━━━━┛
 ```
 
-Full mode replaces the compact `Mode` column with human-readable `Perm` (`rwxrwxrwx`) and adds `User`, `Group`, and `Created`.
+Full mode switches `Perm` to human-readable `rwxrwxrwx` format and raw byte `Size`, then appends `Created`, `User`, and `Group` after `Modified`.
 
 ---
 
@@ -306,27 +340,27 @@ ll -M src/
 ```
 | Name         | Type | Mode | Size  | Modified            |
 | ------------ | ---- | ---- | ----- | ------------------- |
-| cli.rs       | file | 644  | 2.7K  | 2025-06-01 12:34:56 |
-| export.rs    | file | 644  | 7.4K  | 2025-06-01 12:34:56 |
-| file_info.rs | file | 644  | 5.5K  | 2025-06-01 11:58:11 |
-| main.rs      | file | 644  | 5.4K  | 2025-06-01 12:34:56 |
-| ui.rs        | file | 644  | 20.7K | 2025-06-01 11:58:11 |
+| cli.rs       | f    | 644  | 2.7K  | 2025-06-01 12:34:56 |
+| export.rs    | f    | 644  | 7.4K  | 2025-06-01 12:34:56 |
+| file_info.rs | f    | 644  | 5.5K  | 2025-06-01 11:58:11 |
+| main.rs      | f    | 644  | 5.4K  | 2025-06-01 12:34:56 |
+| ui.rs        | f    | 644  | 20.7K | 2025-06-01 11:58:11 |
 ```
 
-With `-f` three extra columns are added — `User`, `Group`, and `Created`:
+Executable files appear as `*file` in the Type column. With `-f` three extra columns are added — `Created`, `User`, and `Group`:
 
 ```bash
 ll -fM src/
 ```
 
 ```
-| Name         | Type | Mode | Size  | Modified            | User         | Group      | Created             |
-| ------------ | ---- | ---- | ----- | ------------------- | ------------ | ---------- | ------------------- |
-| cli.rs       | file | 644  | 2.7K  | 2025-06-01 12:34:56 | alice (1000) | staff (20) | 2025-05-10 09:00:00 |
-| export.rs    | file | 644  | 7.4K  | 2025-06-01 12:34:56 | alice (1000) | staff (20) | 2025-05-10 09:00:00 |
-| file_info.rs | file | 644  | 5.5K  | 2025-06-01 11:58:11 | alice (1000) | staff (20) | 2025-05-10 09:00:00 |
-| main.rs      | file | 644  | 5.4K  | 2025-06-01 12:34:56 | alice (1000) | staff (20) | 2025-05-10 09:00:00 |
-| ui.rs        | file | 644  | 20.7K | 2025-06-01 11:58:11 | alice (1000) | staff (20) | 2025-05-10 09:00:00 |
+| Name         | Type | Mode | Size  | Modified            | Created             | User         | Group      |
+| ------------ | ---- | ---- | ----- | ------------------- | ------------------- | ------------ | ---------- |
+| cli.rs       | f    | 644  | 2.7K  | 2025-06-01 12:34:56 | 2025-05-10 09:00:00 | alice (1000) | staff (20) |
+| export.rs    | f    | 644  | 7.4K  | 2025-06-01 12:34:56 | 2025-05-10 09:00:00 | alice (1000) | staff (20) |
+| file_info.rs | f    | 644  | 5.5K  | 2025-06-01 11:58:11 | 2025-05-10 09:00:00 | alice (1000) | staff (20) |
+| main.rs      | f    | 644  | 5.4K  | 2025-06-01 12:34:56 | 2025-05-10 09:00:00 | alice (1000) | staff (20) |
+| ui.rs        | f    | 644  | 20.7K | 2025-06-01 11:58:11 | 2025-05-10 09:00:00 | alice (1000) | staff (20) |
 ```
 
 Save to a file:
@@ -335,6 +369,19 @@ Save to a file:
 ll -M -o FILELIST.md src/
 ll -fM -O src/            # auto-named → src/src.md  (full mode)
 ```
+
+---
+
+## Shell alias conflict (oh-my-zsh)
+
+oh-my-zsh defines `alias ll='ls -lh'` in `~/.oh-my-zsh/lib/directories.zsh`.
+Add the following line to `~/.zshrc` **after** the `source $ZSH/oh-my-zsh.sh` line:
+
+```zsh
+unalias ll || true
+```
+
+This silently removes the built-in alias without error if it does not exist.
 
 ---
 
@@ -348,8 +395,6 @@ cargo test               # all tests (unit + integration)
 cargo clippy             # lint
 cargo fmt                # format
 ```
-
-The release profile uses `lto = "fat"`, `opt-level = "z"`, `codegen-units = 1`, and `strip = true` for a small, fast binary.
 
 ### Releasing a new version
 
