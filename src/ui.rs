@@ -1,9 +1,8 @@
-use crate::file_info::{self, FileInfo, DIR_COLOR};
-use owo_colors::{OwoColorize, Rgb};
+use crate::file_info::{self, FileInfo};
+use crate::theme::Palette;
+use owo_colors::OwoColorize;
 use terminal_size::{terminal_size, Width};
 use unicode_width::UnicodeWidthStr;
-
-const BORDER_COLOR: Rgb = Rgb(0xB2, 0x94, 0xBC);
 
 fn display_width(s: &str) -> usize {
     UnicodeWidthStr::width(s)
@@ -39,9 +38,9 @@ fn truncate_to_cols(s: &str, max_cols: usize) -> String {
 
 /// Renders the file list as a Unicode box-drawing table, sized to the terminal.
 /// Names that exceed the available column width are truncated with `".."`.
-pub fn render_table(files: &[FileInfo], is_full_mode: bool) {
+pub fn render_table(files: &[FileInfo], is_full_mode: bool, pal: &Palette) {
     if files.is_empty() {
-        println!("{}", "Directory is empty.".color(BORDER_COLOR));
+        println!("{}", "Directory is empty.".color(pal.border));
         return;
     }
 
@@ -51,14 +50,13 @@ pub fn render_table(files: &[FileInfo], is_full_mode: bool) {
         80
     };
 
-    let mut exe_w = 3;
     let mut perm_w = if is_full_mode { 9 } else { 3 };
     let mut size_w = 4;
     let type_w = 4;
+    let mut mod_w = 8;
     let mut user_w = 4;
     let mut group_w = 5;
     let mut created_w = 7;
-    let mut mod_w = 8;
 
     let time_fmt = "%Y-%m-%d %H:%M:%S";
 
@@ -66,16 +64,16 @@ pub fn render_table(files: &[FileInfo], is_full_mode: bool) {
     let mut groups_cache = std::collections::HashMap::new();
 
     for f in files {
-        if f.is_exec {
-            exe_w = exe_w.max(3);
-        }
-
         let size_str = if is_full_mode {
             f.size.to_string()
         } else {
             file_info::format_size_human(f.size)
         };
         size_w = size_w.max(size_str.len());
+
+        if let Some(m) = f.modified {
+            mod_w = mod_w.max(m.format(time_fmt).to_string().len());
+        }
 
         if is_full_mode {
             let u_name = users_cache.entry(f.uid).or_insert_with(|| {
@@ -95,17 +93,14 @@ pub fn render_table(files: &[FileInfo], is_full_mode: bool) {
             if let Some(c) = f.created {
                 created_w = created_w.max(c.format(time_fmt).to_string().len());
             }
-            if let Some(m) = f.modified {
-                mod_w = mod_w.max(m.format(time_fmt).to_string().len());
-            }
         }
     }
 
     perm_w = perm_w.max(4);
 
-    let mut fixed_widths = vec![exe_w, perm_w, size_w, type_w];
+    let mut fixed_widths = vec![perm_w, size_w, type_w, mod_w];
     if is_full_mode {
-        fixed_widths.extend_from_slice(&[user_w, group_w, created_w, mod_w]);
+        fixed_widths.extend_from_slice(&[created_w, user_w, group_w]);
     }
 
     let cols_count = fixed_widths.len() + 1;
@@ -113,30 +108,29 @@ pub fn render_table(files: &[FileInfo], is_full_mode: bool) {
     let name_w = term_width.saturating_sub(total_fixed_space).max(10);
 
     let print_border = |start: &str, mid: &str, end: &str| {
-        print!("{}", start.color(BORDER_COLOR));
-        print!("{}", "━".repeat(name_w + 2).color(BORDER_COLOR));
+        print!("{}", start.color(pal.border));
+        print!("{}", "━".repeat(name_w + 2).color(pal.border));
 
         for w in &fixed_widths {
-            print!("{}", mid.color(BORDER_COLOR));
-            print!("{}", "━".repeat(*w + 2).color(BORDER_COLOR));
+            print!("{}", mid.color(pal.border));
+            print!("{}", "━".repeat(*w + 2).color(pal.border));
         }
-        println!("{}", end.color(BORDER_COLOR));
+        println!("{}", end.color(pal.border));
     };
 
-    let v_bar = format!("{}", "┃".color(BORDER_COLOR));
+    let v_bar = format!("{}", "┃".color(pal.border));
 
     print_border("┏", "┳", "┓");
 
     print!("{} {:<width$} ", v_bar, "Name", width = name_w);
-    print!("{} {:<width$} ", v_bar, "Exe", width = exe_w);
     print!("{} {:>width$} ", v_bar, "Perm", width = perm_w);
     print!("{} {:>width$} ", v_bar, "Size", width = size_w);
     print!("{} {:>width$} ", v_bar, "Type", width = type_w);
+    print!("{} {:>width$} ", v_bar, "Modified", width = mod_w);
     if is_full_mode {
+        print!("{} {:>width$} ", v_bar, "Created", width = created_w);
         print!("{} {:>width$} ", v_bar, "User", width = user_w);
         print!("{} {:>width$} ", v_bar, "Group", width = group_w);
-        print!("{} {:>width$} ", v_bar, "Created", width = created_w);
-        print!("{} {:>width$} ", v_bar, "Modified", width = mod_w);
     }
     println!("{}", v_bar);
 
@@ -158,18 +152,17 @@ pub fn render_table(files: &[FileInfo], is_full_mode: bool) {
         let (styled_display, pad_len) = if raw_width > name_w {
             let truncated = truncate_to_cols(&raw_display, name_w);
             let styled = if f.is_dir {
-                truncated.color(DIR_COLOR).to_string()
+                truncated.color(pal.dir).to_string()
             } else if f.is_exec {
-                truncated.white().bold().to_string()
+                truncated.color(pal.exec).bold().to_string()
             } else {
-                truncated.white().to_string()
+                truncated.color(pal.file).to_string()
             };
             (styled, 0usize)
         } else {
-            (f.display_name(is_full_mode), name_w - raw_width)
+            (f.display_name(is_full_mode, pal), name_w - raw_width)
         };
 
-        let exe_str = if f.is_exec { "exe" } else { "" };
         let perm_str = if is_full_mode {
             file_info::format_permissions_rwx(f.mode)
         } else {
@@ -181,18 +174,25 @@ pub fn render_table(files: &[FileInfo], is_full_mode: bool) {
             file_info::format_size_human(f.size)
         };
         let type_str = if f.is_dir {
-            "d"
+            "d".to_string()
         } else if f.is_symlink {
-            "l"
+            "l".to_string()
+        } else if f.is_exec {
+            "*f".to_string()
         } else {
-            "f"
+            "f".to_string()
         };
 
+        let m_str = f
+            .modified
+            .map(|m| m.format(time_fmt).to_string())
+            .unwrap_or_else(|| "-".to_string());
+
         print!("{} {}{} ", v_bar, styled_display, " ".repeat(pad_len));
-        print!("{} {:<width$} ", v_bar, exe_str, width = exe_w);
         print!("{} {:>width$} ", v_bar, perm_str, width = perm_w);
         print!("{} {:>width$} ", v_bar, size_str, width = size_w);
         print!("{} {:>width$} ", v_bar, type_str, width = type_w);
+        print!("{} {:>width$} ", v_bar, m_str, width = mod_w);
 
         if is_full_mode {
             let u_name = users_cache.get(&f.uid).expect("User ID missing from cache");
@@ -201,15 +201,10 @@ pub fn render_table(files: &[FileInfo], is_full_mode: bool) {
                 .created
                 .map(|c| c.format(time_fmt).to_string())
                 .unwrap_or_else(|| "-".to_string());
-            let m_str = f
-                .modified
-                .map(|m| m.format(time_fmt).to_string())
-                .unwrap_or_else(|| "-".to_string());
 
+            print!("{} {:>width$} ", v_bar, c_str, width = created_w);
             print!("{} {:>width$} ", v_bar, u_name, width = user_w);
             print!("{} {:>width$} ", v_bar, g_name, width = group_w);
-            print!("{} {:>width$} ", v_bar, c_str, width = created_w);
-            print!("{} {:>width$} ", v_bar, m_str, width = mod_w);
         }
         println!("{}", v_bar);
     }
@@ -221,10 +216,6 @@ pub fn render_table(files: &[FileInfo], is_full_mode: bool) {
 mod tests {
     use super::{display_width, truncate_to_cols};
 
-    // ---------------------------------------------------------------------------
-    // display_width tests
-    // ---------------------------------------------------------------------------
-
     #[test]
     fn test_display_width_ascii() {
         assert_eq!(display_width("hello"), 5);
@@ -234,21 +225,18 @@ mod tests {
 
     #[test]
     fn test_display_width_cyrillic() {
-        // Each Cyrillic character occupies 1 terminal column
         assert_eq!(display_width("привет"), 6);
         assert_eq!(display_width("файл"), 4);
     }
 
     #[test]
     fn test_display_width_cjk() {
-        // CJK characters are full-width: 2 columns each
         assert_eq!(display_width("文件"), 4);
         assert_eq!(display_width("ファイル"), 8);
     }
 
     #[test]
     fn test_display_width_arabic() {
-        // Arabic characters occupy 1 column each
         assert_eq!(display_width("ملف"), 3);
     }
 
@@ -257,11 +245,6 @@ mod tests {
         // ASCII (5) + space (1) + Cyrillic (6) = 12
         assert_eq!(display_width("hello привет"), 12);
     }
-
-    // ---------------------------------------------------------------------------
-    // truncate_to_cols tests
-    // The truncated string must always have display_width <= max_cols.
-    // ---------------------------------------------------------------------------
 
     #[test]
     fn test_truncate_fits_without_truncation() {
@@ -439,21 +422,15 @@ mod tests {
         assert!(result.ends_with(".."));
     }
 
-    // ---------------------------------------------------------------------------
-    // Simulated table layout tests — verify name column never overflows
-    // for a given terminal width.
-    // ---------------------------------------------------------------------------
-
     /// Calculates the name column width the same way render_table does.
     fn compute_name_w(term_width: usize, is_full_mode: bool) -> usize {
-        let exe_w = 3usize;
         let perm_w = if is_full_mode { 9 } else { 4 };
         let size_w = 4usize;
         let type_w = 4usize;
-        let mut fixed_widths = vec![exe_w, perm_w, size_w, type_w];
+        let mod_w = 8usize;
+        let mut fixed_widths = vec![perm_w, size_w, type_w, mod_w];
         if is_full_mode {
-            // minimum widths for full-mode columns
-            fixed_widths.extend_from_slice(&[4usize, 5, 7, 8]);
+            fixed_widths.extend_from_slice(&[7usize, 4, 5]);
         }
         let cols_count = fixed_widths.len() + 1;
         let total_fixed_space: usize = fixed_widths.iter().sum::<usize>() + (1 + 3 * cols_count);

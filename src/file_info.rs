@@ -1,11 +1,9 @@
 use chrono::{DateTime, Local};
-use owo_colors::{OwoColorize, Rgb};
+use owo_colors::OwoColorize;
 use serde::{Serialize, Serializer};
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::PathBuf;
-
-pub const DIR_COLOR: Rgb = Rgb(0x42, 0x7A, 0xB4);
 
 /// Serializes a Unix mode bitmask as a 3-digit octal string (e.g. `0o644` → `"644"`).
 fn serialize_mode_octal<S: Serializer>(mode: &u32, s: S) -> Result<S::Ok, S::Error> {
@@ -68,7 +66,7 @@ impl FileInfo {
         })
     }
 
-    pub fn display_name(&self, is_full_mode: bool) -> String {
+    pub fn display_name(&self, is_full_mode: bool, palette: &crate::theme::Palette) -> String {
         let mut display = self.name.clone();
 
         if is_full_mode && self.is_symlink {
@@ -78,11 +76,11 @@ impl FileInfo {
         }
 
         if self.is_dir {
-            display.color(DIR_COLOR).to_string()
+            display.color(palette.dir).to_string()
         } else if self.is_exec {
-            display.white().bold().to_string()
+            display.color(palette.exec).bold().to_string()
         } else {
-            display.white().to_string()
+            display.color(palette.file).to_string()
         }
     }
 }

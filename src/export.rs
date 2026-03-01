@@ -78,8 +78,6 @@ pub fn export_data(files: &[FileInfo], format: ExportFormat, is_full_mode: bool)
             Ok(buffer)
         }
 
-        // GFM table: compact = Name | Type | Mode | Size | Modified.
-        // Full mode (-f) adds User | Group | Created columns.
         ExportFormat::Markdown => {
             let time_fmt = "%Y-%m-%d %H:%M:%S";
 
@@ -197,18 +195,18 @@ pub fn export_data(files: &[FileInfo], format: ExportFormat, is_full_mode: bool)
 
             if is_full_mode {
                 buf.push_str(&format!(
-                    "| {:<w_name$} | {:<w_type$} | {:<w_mode$} | {:<w_size$} | {:<w_mod$} | {:<w_user$} | {:<w_grp$} | {:<w_crt$} |\n",
-                    H_NAME, H_TYPE, H_MODE, H_SIZE, H_MOD, H_USER, H_GRP, H_CRT,
+                    "| {:<w_name$} | {:<w_type$} | {:<w_mode$} | {:<w_size$} | {:<w_mod$} | {:<w_crt$} | {:<w_user$} | {:<w_grp$} |\n",
+                    H_NAME, H_TYPE, H_MODE, H_SIZE, H_MOD, H_CRT, H_USER, H_GRP,
                     w_name = w_name, w_type = w_type, w_mode = w_mode,
                     w_size = w_size, w_mod = w_mod,
-                    w_user = w_user, w_grp = w_grp, w_crt = w_crt,
+                    w_crt = w_crt, w_user = w_user, w_grp = w_grp,
                 ));
                 buf.push_str(&format!(
-                    "| {:-<w_name$} | {:-<w_type$} | {:-<w_mode$} | {:-<w_size$} | {:-<w_mod$} | {:-<w_user$} | {:-<w_grp$} | {:-<w_crt$} |\n",
+                    "| {:-<w_name$} | {:-<w_type$} | {:-<w_mode$} | {:-<w_size$} | {:-<w_mod$} | {:-<w_crt$} | {:-<w_user$} | {:-<w_grp$} |\n",
                     "", "", "", "", "", "", "", "",
                     w_name = w_name, w_type = w_type, w_mode = w_mode,
                     w_size = w_size, w_mod = w_mod,
-                    w_user = w_user, w_grp = w_grp, w_crt = w_crt,
+                    w_crt = w_crt, w_user = w_user, w_grp = w_grp,
                 ));
             } else {
                 buf.push_str(&format!(
@@ -242,18 +240,18 @@ pub fn export_data(files: &[FileInfo], format: ExportFormat, is_full_mode: bool)
             for r in &rows {
                 if is_full_mode {
                     buf.push_str(&format!(
-                        "| {:<w_name$} | {:<w_type$} | {:<w_mode$} | {:<w_size$} | {:<w_mod$} | {:<w_user$} | {:<w_grp$} | {:<w_crt$} |\n",
+                        "| {:<w_name$} | {:<w_type$} | {:<w_mode$} | {:<w_size$} | {:<w_mod$} | {:<w_crt$} | {:<w_user$} | {:<w_grp$} |\n",
                         md_escape(&r.name),
                         md_escape(r.kind),
                         md_escape(&r.mode),
                         md_escape(&r.size),
                         md_escape(&r.modified),
+                        md_escape(r.created.as_deref().unwrap_or("-")),
                         md_escape(r.user.as_deref().unwrap_or("-")),
                         md_escape(r.group.as_deref().unwrap_or("-")),
-                        md_escape(r.created.as_deref().unwrap_or("-")),
                         w_name = w_name, w_type = w_type, w_mode = w_mode,
                         w_size = w_size, w_mod = w_mod,
-                        w_user = w_user, w_grp = w_grp, w_crt = w_crt,
+                        w_crt = w_crt, w_user = w_user, w_grp = w_grp,
                     ));
                 } else {
                     buf.push_str(&format!(

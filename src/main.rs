@@ -1,6 +1,7 @@
 mod cli;
 mod export;
 mod file_info;
+mod theme;
 mod ui;
 
 use anyhow::{Context, Result};
@@ -49,7 +50,7 @@ fn main() -> Result<()> {
 
     let resolve_symlinks = cli.f || export_format.is_some();
 
-    let mut files = Vec::new();
+    let mut files: Vec<FileInfo> = Vec::new();
     let entries = fs::read_dir(&cli.path).with_context(|| format!("Failed to read directory: '{}'", cli.path))?;
 
     for entry in entries.flatten() {
@@ -71,10 +72,10 @@ fn main() -> Result<()> {
         }
     }
 
-    if cli.s {
+    {
         let active_sort_flags = [cli.n, cli.size, cli.m, cli.b].iter().filter(|&&x| x).count();
 
-        if active_sort_flags > 1 {
+        if active_sort_flags > 1 || active_sort_flags == 0 || cli.n {
             files.sort_by(|a, b| a.name.cmp(&b.name));
         } else if cli.size {
             files.sort_by(|a, b| a.size.cmp(&b.size));
@@ -87,16 +88,17 @@ fn main() -> Result<()> {
                 (None, Some(_)) => std::cmp::Ordering::Greater,
                 (None, None) => std::cmp::Ordering::Equal,
             });
-        } else {
-            files.sort_by(|a, b| a.name.cmp(&b.name));
         }
 
         if cli.d {
             files.reverse();
         }
-    } else {
-        files.sort_by(|a, b| a.name.cmp(&b.name));
     }
+
+    let detected_theme = theme::detect();
+    let palette = theme::palette(detected_theme);
+
+    let export_format_for_copy = export_format;
 
     if let Some(format) = export_format {
         let data = export_data(&files, format, cli.f)?;
@@ -139,29 +141,39 @@ fn main() -> Result<()> {
         };
 
         if let Some(path) = output_path {
+            // When saving to a file, render the table first so the user sees
+            // the listing in their terminal alongside the export message.
+            ui::render_table(&files, cli.f, &palette);
             let mut file =
                 File::create(&path).with_context(|| format!("Failed to create output file: '{}'", path.display()))?;
             file.write_all(data.as_bytes())?;
             println!("{}", path.display());
         } else {
+            // Stdout export (pipe-friendly): only the raw data, no table.
             print!("{}", data);
             let _ = std::io::stdout().flush();
-
-            match Clipboard::new() {
-                Ok(mut clipboard) => {
-                    if clipboard.set_text(data).is_err() {
-                        eprintln!("(Failed to copy output to clipboard)");
-                    } else {
-                        eprintln!("\n==[Copied to clipboard!]==");
-                    }
-                }
-                Err(_) => {
-                    eprintln!("(Clipboard unavailable)");
-                }
-            }
         }
     } else {
-        ui::render_table(&files, cli.f);
+        ui::render_table(&files, cli.f, &palette);
+    }
+
+    if cli.copy {
+        let content = if let Some(format) = export_format_for_copy {
+            export_data(&files, format, cli.f)?
+        } else {
+            files.iter().map(|f| f.name.as_str()).collect::<Vec<_>>().join("\n")
+        };
+
+        match Clipboard::new() {
+            Ok(mut clipboard) => {
+                if clipboard.set_text(content).is_err() {
+                    eprintln!("(Failed to copy to clipboard)");
+                } else {
+                    eprintln!("-> Copied to clipboard.");
+                }
+            }
+            Err(_) => eprintln!("(Clipboard unavailable)"),
+        }
     }
 
     Ok(())
